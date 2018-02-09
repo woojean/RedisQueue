@@ -2,7 +2,7 @@
 Redis Queue of PHP
 
 # Data Flow
-![image](https://github.com/woojean/RedisQueue/raw/master/imgs/redis-queue.jpg)
+![image](https://github.com/woojean/RedisQueue/blob/master/imgs/redis-queue.png)
 
 # Demo
 ## Add task
