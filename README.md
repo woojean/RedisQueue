@@ -90,17 +90,16 @@ try {
 ```
 
 # Other Params
-* $queueName 
+* **$queueName** 
 
-* $redisConfig 
-Redis connect config.
+* **$redisConfig** 
+  Redis connect config.
 
-* $retryTimes
-If the task handle failed,and up to retryLimit ,the task will be transfer to block task.
+* **$retryTimes**
+  If the task handle failed,and up to retryLimit ,the task will be transfer to block task.
 
-* $waitTime
-If there is no more task to handle, the 'get' action will be block.
-
+* **$waitTime**
+  If there is no more task to handle, the 'get' action will be block.
 
 
 
