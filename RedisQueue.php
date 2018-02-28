@@ -6,7 +6,7 @@
  * Time: 10:04
  */
 
-namespace Queue\RedisQueue;
+namespace Look\Queue\RedisQueue;
 
 /**
  * @property \Redis redis
@@ -79,21 +79,27 @@ class RedisQueue
     }
 
 
+    public function getProcessingIndexName()
+    {
+        $keyName = self::PREFIX . ':' . self::PROCESSING_INDEX . ':' . $this->queueName;
+        return $keyName;
+    }
+
     public function getProcessingIndex()
     {
-        $keyName = self::PREFIX . self::PROCESSING_INDEX;
+        $keyName = $this->getProcessingIndexName();
         return $this->redis->get($keyName);
     }
 
     public function setProcessingIndex($index)
     {
-        $keyName = self::PREFIX . self::PROCESSING_INDEX;
+        $keyName = $this->getProcessingIndexName();
         return $this->redis->set($keyName, $index);
     }
 
     public function removeProcessingIndex()
     {
-        $keyName = self::PREFIX . self::PROCESSING_INDEX;
+        $keyName = $this->getProcessingIndexName();
         return $this->redis->del($keyName);
     }
 
@@ -162,6 +168,18 @@ class RedisQueue
         $blockedTime = $this->redis->hGet($this->getBlockedTimesHashName(), $processingIndex);
         $blockedTime += 1;
         $ret = $this->redis->hSet($this->getBlockedTimesHashName(), $processingIndex, $blockedTime);
+        return $ret;
+    }
+
+    public function getBlockedIndex()
+    {
+        $ret = $this->redis->rPop($this->getBlockedListName());
+        return $ret;
+    }
+
+    public function removeBlockedTimes($index)
+    {
+        $ret = $this->redis->hDel($this->getBlockedTimesHashName(), $index);
         return $ret;
     }
 
@@ -265,6 +283,28 @@ class RedisQueue
     {
         $processingIndex = $this->getProcessingIndex();
         return $processingIndex;
+    }
+
+    // repair
+    public function repair()
+    {
+        $num = 0;
+        // restore blocked
+        $blockedIndex = $this->getBlockedIndex();
+        while (!empty($blockedIndex)) {
+            $this->addIndex($blockedIndex);
+
+            // clear blocked times
+            $this->removeBlockedTimes($blockedIndex);
+
+            $blockedIndex = $this->getBlockedIndex();
+            $num += 1;
+        }
+
+        // clear current index
+        $this->removeProcessingIndex();
+
+        return $num;
     }
 
 
