@@ -89,6 +89,13 @@ try {
   }
 ```
 
+## Restore blocked
+```php
+<?php
+  $redisQueue = new RedisQueue($queueName, $redisConfig);
+  $num = $redisQueue->repair();
+```
+
 # Other Params
 * **$queueName** 
 
