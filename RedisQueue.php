@@ -108,6 +108,12 @@ class RedisQueue
     {
         $this->redis = new \Redis();
         $this->redis->connect($redisConfig['host'], $redisConfig['port']);
+        if (!empty($redisConfig['auth'])) {
+            $this->redis->auth($redisConfig['auth']);
+        }
+        if (!empty($redisConfig['index'])) {
+            $this->redis->select($redisConfig['index']);
+        }
         return True;
     }
 
@@ -307,5 +313,14 @@ class RedisQueue
         return $num;
     }
 
+
+    // status
+    public function status()
+    {
+        $ret = [];
+        $ret['total pending index'] = $this->redis->lLen($this->getIndexListName());
+        $ret['total blocked index'] = $this->redis->lLen($this->getBlockedListName());
+        return $ret;
+    }
 
 }
