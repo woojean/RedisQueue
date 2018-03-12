@@ -13,9 +13,10 @@ namespace Look\Queue\RedisQueue;
  */
 class RedisQueue
 {
-    const PREFIX = 'redisqueue';
+    const PREFIX = 'RQ';
     const ERROR_QUEUE_NAME_EMPTY = 'Queue name can not be empty!';
-    const PROCESSING_INDEX = 'processing_index';
+    const PROCESSING_INDEX = 'PI';
+    const DATA_KEY = 'DK';
 
     public $queueName = '';
 
@@ -60,47 +61,73 @@ class RedisQueue
 
     public function getIndexListName()
     {
-        return self::PREFIX . ':index_list:' . $this->queueName;
+        // index list
+        return self::PREFIX . ':IL:' . $this->queueName;
     }
 
     public function getBlockedListName()
     {
-        return self::PREFIX . ':blocked_list:' . $this->queueName;
+        // blocked list
+        return self::PREFIX . ':BL:' . $this->queueName;
     }
 
     public function getDataHashName()
     {
-        return self::PREFIX . ':data_hash:' . $this->queueName;
+        // data hash
+        return self::PREFIX . ':DH:' . $this->queueName;
     }
 
     public function getBlockedTimesHashName()
     {
-        return self::PREFIX . ':blocked_times_hash' . $this->queueName;
+        // blocked times hash
+        return self::PREFIX . ':BTH' . $this->queueName;
     }
 
 
-    public function getProcessingIndexName()
+    public function getDataKey($data)
     {
-        $keyName = self::PREFIX . ':' . self::PROCESSING_INDEX . ':' . $this->queueName;
+        return $data[self::DATA_KEY];
+    }
+
+    public function setDataKey($data, $index)
+    {
+        $data[self::DATA_KEY] = $index;
+        return $data;
+    }
+
+    public function getProcessingIndexName($data)
+    {
+        $dataKey = $this->getDataKey($data);
+        $keyName = self::PREFIX . ':' . self::PROCESSING_INDEX . ':' . $this->queueName . ':' . $dataKey;
         return $keyName;
     }
 
-    public function getProcessingIndex()
+    public function getProcessingIndex($data)
     {
-        $keyName = $this->getProcessingIndexName();
+        $keyName = $this->getProcessingIndexName($data);
         return $this->redis->get($keyName);
     }
 
-    public function setProcessingIndex($index)
+    public function setProcessingIndex($data)
     {
-        $keyName = $this->getProcessingIndexName();
+        $keyName = $this->getProcessingIndexName($data);
+        $index = $this->getDataKey($data);
         return $this->redis->set($keyName, $index);
     }
 
-    public function removeProcessingIndex()
+    public function removeProcessingIndex($data)
     {
-        $keyName = $this->getProcessingIndexName();
+        $keyName = $this->getProcessingIndexName($data);
         return $this->redis->del($keyName);
+    }
+
+    public function removeAllProcessingIndex()
+    {
+        $pattern = self::PREFIX . ':' . self::PROCESSING_INDEX . ':' . $this->queueName . ':*';
+        $keys = $this->redis->keys($pattern);
+        foreach ($keys as $key) {
+            $this->redis->del($key);
+        }
     }
 
 
@@ -108,10 +135,12 @@ class RedisQueue
     {
         $this->redis = new \Redis();
         $this->redis->connect($redisConfig['host'], $redisConfig['port']);
-        if (!empty($redisConfig['auth'])) {
+
+        if(!empty($redisConfig['auth'])){
             $this->redis->auth($redisConfig['auth']);
         }
-        if (!empty($redisConfig['index'])) {
+
+        if(!empty($redisConfig['index'])){
             $this->redis->select($redisConfig['index']);
         }
         return True;
@@ -157,8 +186,9 @@ class RedisQueue
         return $ret;
     }
 
-    public function removeData($index)
+    public function removeData($data)
     {
+        $index = $this->getDataKey($data);
         $ret = $this->redis->hDel($this->getDataHashName(), $index);
         return $ret;
     }
@@ -190,6 +220,7 @@ class RedisQueue
     }
 
 
+
     // ==== API ====================================================================
 
     // add new message
@@ -219,12 +250,6 @@ class RedisQueue
     // get message
     public function get()
     {
-        // check current key
-        $processingIndex = $this->getProcessingIndex();
-        if (!empty($processingIndex)) {
-            throw new RedisQueueException('Have pending tasks!');
-        }
-
         // get index
         $index = $this->getIndex();
         if (empty($index)) {
@@ -235,34 +260,34 @@ class RedisQueue
         // get data
         $data = $this->getData($index);
         if (empty($data)) { // invalid index
-            $this->remove();
+            $data = $this->setDataKey($data, $index);
+            $this->remove($index);
         }
 
         // set current key
-        $this->setProcessingIndex($index);
+        $data = $this->setDataKey($data, $index);
+        $this->setProcessingIndex($data);
 
         return $data;
     }
 
 
     // remove message
-    public function remove()
+    public function remove($data)
     {
-        $processingIndex = $this->getProcessingIndex();
-
         // remove processing index
-        $this->removeProcessingIndex();
+        $this->removeProcessingIndex($data);
 
         // remove data
-        $ret = $this->removeData($processingIndex);
+        $ret = $this->removeData($data);
         return $ret;
     }
 
 
     // rollback message
-    public function rollback()
+    public function rollback($data)
     {
-        $processingIndex = $this->getProcessingIndex();
+        $processingIndex = $this->getProcessingIndex($data);
         if ($processingIndex) {
             // add blocked times
             $this->addBlocked($processingIndex);
@@ -278,16 +303,16 @@ class RedisQueue
             }
             if (!empty($ret)) {
                 // clear processing index
-                $this->removeProcessingIndex();
+                $this->removeProcessingIndex($data);
             }
         }
 
     }
 
     // processing
-    public function getCurrentIndex()
+    public function getCurrentIndex($data)
     {
-        $processingIndex = $this->getProcessingIndex();
+        $processingIndex = $this->getProcessingIndex($data);
         return $processingIndex;
     }
 
@@ -308,7 +333,7 @@ class RedisQueue
         }
 
         // clear current index
-        $this->removeProcessingIndex();
+        $this->removeAllProcessingIndex();
 
         return $num;
     }
